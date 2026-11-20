@@ -1,0 +1,1 @@
+{"action":{"default_popup":"popup.html","default_title":"豆瓣同步到 NeoDB"},"background":{"service_worker":"background.js","type":"module"},"description":"批量把豆瓣看過 / 讀過 / 聽過 / 玩過的條目同步到 NeoDB，標記日期沿用豆瓣上的標記日期。","host_permissions":["https://*.douban.com/*","https://neodb.social/*"],"manifest_version":3,"name":"豆瓣同步到 NeoDB","permissions":["scripting","storage"],"version":"1.0.7"}

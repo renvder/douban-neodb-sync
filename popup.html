@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>豆瓣同步到 NeoDB</title>
+<style>
+  * { box-sizing: border-box; }
+  body { width: 380px; margin: 0; padding: 14px; font: 13px/1.5 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; color: #222; }
+  h1 { font-size: 15px; margin: 0 0 10px; }
+  h2 { font-size: 13px; margin: 14px 0 6px; }
+  label { display: block; margin: 6px 0; }
+  label span { display: block; color: #666; font-size: 12px; margin-bottom: 2px; }
+  input[type=text], input[type=password], select { width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; font: inherit; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .row label { display: inline-flex; align-items: center; gap: 4px; margin: 2px 0; }
+  .row input { width: auto; }
+  .btns { display: flex; gap: 8px; margin-top: 14px; }
+  button { flex: 1; padding: 8px; border: 0; border-radius: 6px; font: inherit; cursor: pointer; }
+  #startBtn { background: #2ea44f; color: #fff; }
+  #startBtn:disabled { background: #9bbf9f; cursor: default; }
+  #pauseBtn { background: #e8e8e8; }
+  #resetBtn { background: #fff; border: 1px solid #ccc; flex: 0 0 auto; padding: 8px 12px; }
+  #status { margin-top: 12px; padding: 8px; background: #f6f6f6; border-radius: 6px; min-height: 20px; }
+  #progress { height: 8px; background: #eee; border-radius: 4px; margin-top: 8px; overflow: hidden; }
+  #progressBar { height: 100%; width: 0; background: #2ea44f; }
+  #log { margin-top: 8px; height: 120px; overflow-y: auto; background: #111; color: #ddd; border-radius: 6px; padding: 8px; font: 11px/1.5 monospace; white-space: pre-wrap; word-break: break-all; }
+  #report { margin-top: 8px; font-size: 12px; }
+  #report li { margin: 2px 0; }
+  .hint { color: #888; font-size: 12px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<h1>豆瓣同步到 NeoDB</h1>
+
+<label><span>NeoDB 站點</span>
+  <input type="text" id="instance" value="https://neodb.social">
+</label>
+<label><span>NeoDB API Token（只存在本機瀏覽器裏，不會發給任何第三方）</span>
+  <input type="password" id="token" placeholder="在 NeoDB 設置 → 開發者選項裏生成">
+</label>
+
+<h2>同步內容</h2>
+<div class="row" id="categories">
+  <label><input type="checkbox" value="movie" checked> 電影（看過）</label>
+  <label><input type="checkbox" value="book" checked> 書籍（讀過）</label>
+  <label><input type="checkbox" value="music" checked> 音樂（聽過）</label>
+  <label><input type="checkbox" value="game"> 遊戲（玩過）</label>
+</div>
+<div class="row">
+  <label><input type="checkbox" id="includeRating" checked> 同步評分</label>
+  <label><input type="checkbox" id="includeComments" checked> 同步短評</label>
+</div>
+<label><span>標記可見性</span>
+  <select id="visibility">
+    <option value="public">公開</option>
+    <option value="followers">僅關注者</option>
+    <option value="private">僅自己</option>
+  </select>
+</label>
+<label><input type="checkbox" id="dryRun" checked> 僅試掃描（先看能對上多少條，不寫入 NeoDB）</label>
+
+<div class="btns">
+  <button id="startBtn">開始同步</button>
+  <button id="pauseBtn">暫停</button>
+  <button id="resetBtn">重置</button>
+</div>
+
+<div id="status">未開始</div>
+<div id="progress"><div id="progressBar"></div></div>
+<div id="report"></div>
+<div id="log"></div>
+<p class="hint">第一次建議先勾選“僅試掃描”，確認數量和匹配情況沒問題後，取消勾選再正式同步。同步中可以關閉這個窗口，後台會繼續跑。暫停後點“開始同步”會從頭重新跑，已寫入的條目重複寫入是安全的（按豆瓣數據覆蓋），只是會多花一點時間。</p>
+<p class="hint">之前用別的工具同步過、日期寫錯的條目，這次會按豆瓣日期重新寫入修正——插件不會跳過已標記的條目，每一條都會按豆瓣數據重寫一遍（包括日期）。</p>
+
+<script src="popup.js"></script>
+</body>
+</html>
