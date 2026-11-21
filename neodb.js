@@ -93,11 +93,13 @@ export async function pollFetch(instance, token, doubanUrl) {
 
 // Mark an item. `createdTime` is the Douban mark date as an ISO-8601 string;
 // NeoDB stores it as the mark's date (backdating is supported).
-// Always sends the full body: omitting rating_grade / comment_text / tags
-// on an update would CLEAR those fields on NeoDB.
+// `shelfType` is one of "wishlist" / "progress" / "complete" (NeoDB
+// ShelfType); it defaults to "complete". Always sends the full body:
+// omitting rating_grade / comment_text / tags on an update would CLEAR
+// those fields on NeoDB.
 export async function markItem(instance, token, uuid, mark) {
   const body = {
-    shelf_type: "complete",
+    shelf_type: mark.shelfType || "complete",
     visibility: mark.visibility ?? VISIBILITY.public,
     comment_text: mark.commentText || "",
     rating_grade: mark.ratingGrade || 0,

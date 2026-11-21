@@ -6,10 +6,14 @@ function readConfig() {
   const categories = [...document.querySelectorAll("#categories input:checked")].map(
     (el) => el.value
   );
+  const shelves = [...document.querySelectorAll("#shelves input:checked")].map(
+    (el) => el.value
+  );
   return {
     instance: $("instance").value.trim().replace(/\/+$/, "") || "https://neodb.social",
     token: $("token").value.trim(),
     categories,
+    shelves,
     includeRating: $("includeRating").checked,
     includeComments: $("includeComments").checked,
     visibility: $("visibility").value,
@@ -24,6 +28,16 @@ function applyConfig(c) {
   if (Array.isArray(c.categories)) {
     document.querySelectorAll("#categories input").forEach((el) => {
       el.checked = c.categories.includes(el.value);
+    });
+  }
+  if (Array.isArray(c.shelves)) {
+    document.querySelectorAll("#shelves input").forEach((el) => {
+      el.checked = c.shelves.includes(el.value);
+    });
+  } else {
+    // Configs saved before shelves existed: collect-only (old behaviour).
+    document.querySelectorAll("#shelves input").forEach((el) => {
+      el.checked = el.value === "collect";
     });
   }
   if (typeof c.includeRating === "boolean") $("includeRating").checked = c.includeRating;
@@ -73,12 +87,16 @@ function render(state) {
     if (r.sample) {
       html += "<li>示例（前 5 條將這樣寫入）：</li>";
       html += r.sample
-        .map(
-          (s) =>
-            `<li>「${escapeHtml(s.title)}」— ${escapeHtml(s.date || "無日期")}${
-              s.stars ? ` · ${s.stars} 星` : ""
-            }${s.comment ? ` · “${escapeHtml(s.comment)}”` : ""}</li>`
-        )
+        .map((s) => {
+          const where = [s.categoryLabel, s.shelfLabel]
+            .filter(Boolean)
+            .join(" · ");
+          return `<li>「${escapeHtml(s.title)}」${
+            where ? ` — ${escapeHtml(where)}` : ""
+          } — ${escapeHtml(s.date || "無日期")}${
+            s.stars ? ` · ${s.stars} 星` : ""
+          }${s.comment ? ` · “${escapeHtml(s.comment)}”` : ""}</li>`;
+        })
         .join("");
     }
     html += "</ul>";
@@ -107,6 +125,10 @@ $("startBtn").addEventListener("click", async () => {
   }
   if (config.categories.length === 0) {
     alert("請至少勾選一個分類。");
+    return;
+  }
+  if (config.shelves.length === 0) {
+    alert("請至少勾選一個狀態（願望單 / 進行中 / 已完成）。");
     return;
   }
   await send({ type: "saveConfig", config });

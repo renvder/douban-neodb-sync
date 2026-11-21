@@ -8,26 +8,40 @@
 // NOTE (2026-11-20): the /mine/* shortcuts are dead — Douban serves its own
 // "你想访问的页面不存在" 404 page for them, even for a logged-in user opening
 // them by hand in a normal tab. Every category therefore uses the canonical
-// personal page https://<site>.douban.com/people/<uid>/collect.
+// personal page https://<site>.douban.com/people/<uid>/<shelf>.
+// Douban has three shelves per category; NeoDB has three shelf types.
+// They map 1:1 (verified in neodb-social/neodb, ShelfType enum), so the
+// popup offers all three — a user may have wish/do items even if the
+// author does not. "dropped" exists on NeoDB but has no Douban shelf.
+export const DOUBAN_SHELVES = {
+  wish: { label: "想看", shelfType: "wishlist" },
+  do: { label: "在看", shelfType: "progress" },
+  collect: { label: "看過", shelfType: "complete" },
+};
+
 export const DOUBAN_CATEGORIES = {
   movie: {
     label: "電影",
-    listUrl: (uid) => `https://movie.douban.com/people/${uid}/collect?sort=time`,
+    listUrl: (uid, shelf = "collect") =>
+      `https://movie.douban.com/people/${uid}/${shelf}?sort=time&mode=list`,
     host: "movie.douban.com",
   },
   book: {
     label: "書籍",
-    listUrl: (uid) => `https://book.douban.com/people/${uid}/collect?sort=time`,
+    listUrl: (uid, shelf = "collect") =>
+      `https://book.douban.com/people/${uid}/${shelf}?sort=time&mode=list`,
     host: "book.douban.com",
   },
   music: {
     label: "音樂",
-    listUrl: (uid) => `https://music.douban.com/people/${uid}/collect?sort=time`,
+    listUrl: (uid, shelf = "collect") =>
+      `https://music.douban.com/people/${uid}/${shelf}?sort=time&mode=list`,
     host: "music.douban.com",
   },
   game: {
     label: "遊戲",
-    listUrl: (uid) => `https://www.douban.com/people/${uid}/games?action=played`,
+    listUrl: (uid, shelf = "collect") =>
+      `https://www.douban.com/people/${uid}/games?action=${shelf}`,
     host: "www.douban.com",
   },
 };
@@ -54,13 +68,25 @@ function stripTags(s) {
 // <em>Title</em>). Only the title link is used.
 const TITLE_LINK_RE =
   /<a\s[^>]*href="(https:\/\/(?:movie|book|music)\.douban\.com\/subject\/(\d+)\/|https:\/\/www\.douban\.com\/game\/(\d+)\/)"[^>]*>([\s\S]*?)<\/a>/g;
-const DATE_RE = /<span[^>]*class="date"[^>]*>(\d{4}-\d{2}-\d{2})<\/span>/g;
+// Date element: <span class="date"> in list view, <div class="date"> in the
+// grid view Douban actually serves (even for ?mode=list — verified on a real
+// book page 2026-11-21). In grid view the date is bare text inside the
+// <div>, after the rating span: <div class="date"><span class="rating5-t">
+// </span>&nbsp;&nbsp; 2023-02-10 </div>. The backreference \1 forces the
+// close tag to match the open tag, so the nested </span> cannot end the
+// match early. class="date" (quote right before "date") excludes the hidden
+// <div class="grid-date">, which holds the intro (author/publisher), not a
+// mark date. The date is extracted from the element's inner HTML, since
+// the <div> case has markup before the date.
+const DATE_EL_RE = /<(span|div)[^>]*class="date(?:\s[^"]*)?"[^>]*>([\s\S]*?)<\/\1>/g;
 const RATING_RE = /(?:allstar|rating)(\d+)(?:-t)?/g;
-const COMMENT_RE = /<span[^>]*class="comment"[^>]*>([\s\S]*?)<\/span>/g;
+// Comment is a <span> in list view and a <p> in grid view.
+const COMMENT_RE = /<(?:span|p)[^>]*class="comment"[^>]*>([\s\S]*?)<\/(?:span|p)>/g;
 
 // Parse one list page. Returns { items, looksLikeLogin }.
 // items: [{ doubanUrl, doubanId, title, date, stars (1-5|null), comment }]
-export function parseDoubanListPage(html) {
+// `pageTitle` is document.title from the tab transport ("" when unknown).
+export function parseDoubanListPage(html, pageTitle = "") {
   const links = [...html.matchAll(TITLE_LINK_RE)]
     .filter((m) => {
       const inner = m[4] || "";
@@ -76,10 +102,12 @@ export function parseDoubanListPage(html) {
       index: m.index,
     }));
 
-  const dates = [...html.matchAll(DATE_RE)].map((m) => ({
-    date: m[1],
-    index: m.index,
-  }));
+  const dates = [...html.matchAll(DATE_EL_RE)]
+    .map((m) => {
+      const d = /(\d{4}-\d{2}-\d{2})/.exec(m[2]);
+      return d ? { date: d[1], index: m.index } : null;
+    })
+    .filter(Boolean);
   const ratings = [...html.matchAll(RATING_RE)].map((m) => {
     const n = parseInt(m[1], 10);
     return { stars: n > 5 ? Math.round(n / 10) : n, index: m.index };
@@ -115,20 +143,44 @@ export function parseDoubanListPage(html) {
     return true;
   });
 
+  // Login detection. The page title is the primary signal when the tab
+  // transport provides it: a real list page is titled e.g. "我想读的书(0)",
+  // a login page "登录豆瓣". The raw HTML of a logged-in list page can
+  // contain stray "登录豆瓣" / "验证码" strings (e.g. a hidden login dialog
+  // present on every page), so NEITHER HTML check may fire on a page whose
+  // title says it is a list — that is what killed Frost's (empty) wish
+  // page 2026-11-21 twice: title "我想读的书(0)", 0 items, logged in as
+  // Bing, yet the check fired. A real login/captcha page has a title
+  // that is not a list title, so it still errors. When no title is
+  // available (plain fetch / tests), the HTML checks apply as before.
+  const LIST_TITLE_RE =
+    /想读|在读|读过|想看|在看|看过|想听|在听|听过|想玩|在玩|玩过/;
   const looksLikeLogin =
-    /error code:\s*008|登录豆瓣|请先登录|please login/i.test(html) ||
-    (/captcha|验证码/.test(html) && deduped.length === 0);
+    deduped.length === 0 &&
+    (/登录|login/i.test(pageTitle) ||
+      (!LIST_TITLE_RE.test(pageTitle) &&
+        (/captcha|验证码/.test(html) ||
+          /error code:\s*008|登录豆瓣|请先登录|please login/i.test(html))));
 
   return { items: deduped, looksLikeLogin };
 }
 
 // Fetch one list page. `fetchFn` is injectable for tests.
+// Returns { html, title, pageText, url }. title/pageText come from the tab
+// transport (document.title + leading body text); plain fetch() adapters
+// leave them empty. They are only used as diagnostics when a page looks
+// like a login/verification page.
 export async function fetchDoubanPage(url, fetchFn = fetch) {
   const res = await fetchFn(url, { credentials: "include" });
   if (!res.ok) {
     throw new Error(`DOUBAN_HTTP_${res.status}`);
   }
-  return await res.text();
+  return {
+    html: await res.text(),
+    title: res.title || "",
+    pageText: res.pageText || "",
+    url: res.url || url,
+  };
 }
 
 // Detect the logged-in Douban user id. Primary source: the logged-in
@@ -167,22 +219,33 @@ export async function getDoubanUid(fetchFn = fetch) {
   return null;
 }
 
-// Fetch every page of one category. onProgress(page, pageItems) is called
-// after each page. Returns the full item list.
-export async function fetchDoubanCategory(category, onProgress, fetchFn = fetch) {
+// Fetch every page of one category + shelf. onProgress(page, pageItems)
+// is called after each page. Returns the full item list.
+export async function fetchDoubanCategory(
+  category,
+  shelf = "collect",
+  onProgress,
+  fetchFn = fetch
+) {
   const cfg = DOUBAN_CATEGORIES[category];
   if (!cfg) throw new Error(`UNKNOWN_CATEGORY_${category}`);
+  if (!DOUBAN_SHELVES[shelf]) throw new Error(`UNKNOWN_SHELF_${shelf}`);
 
   const uid = await getDoubanUid(fetchFn);
   if (!uid) throw new Error("DOUBAN_UID_NOT_FOUND");
-  const base = cfg.listUrl(uid);
+  const base = cfg.listUrl(uid, shelf);
 
   const all = [];
   for (let page = 0; page < MAX_PAGES; page++) {
     const url = `${base}${base.includes("?") ? "&" : "?"}start=${page * PAGE_SIZE}`;
-    const html = await fetchDoubanPage(url, fetchFn);
-    const { items, looksLikeLogin } = parseDoubanListPage(html);
-    if (looksLikeLogin) throw new Error("DOUBAN_LOGIN_REQUIRED");
+    const { html, title, pageText } = await fetchDoubanPage(url, fetchFn);
+    const { items, looksLikeLogin } = parseDoubanListPage(html, title);
+    if (looksLikeLogin) {
+      const err = new Error("DOUBAN_LOGIN_REQUIRED");
+      err.pageTitle = title;
+      err.pageText = pageText;
+      throw err;
+    }
     if (items.length === 0) break;
     all.push(...items);
     if (onProgress) onProgress(page + 1, items.length, all.length);

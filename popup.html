@@ -41,10 +41,15 @@
 
 <h2>同步內容</h2>
 <div class="row" id="categories">
-  <label><input type="checkbox" value="movie" checked> 電影（看過）</label>
-  <label><input type="checkbox" value="book" checked> 書籍（讀過）</label>
-  <label><input type="checkbox" value="music" checked> 音樂（聽過）</label>
-  <label><input type="checkbox" value="game"> 遊戲（玩過）</label>
+  <label><input type="checkbox" value="movie" checked> 電影</label>
+  <label><input type="checkbox" value="book" checked> 書籍</label>
+  <label><input type="checkbox" value="music" checked> 音樂</label>
+  <label><input type="checkbox" value="game"> 遊戲</label>
+</div>
+<div class="row" id="shelves">
+  <label><input type="checkbox" value="wish"> 願望單（想看 / 想讀 / 想聽 / 想玩）</label>
+  <label><input type="checkbox" value="do"> 進行中（在看 / 在讀 / 在聽 / 在玩）</label>
+  <label><input type="checkbox" value="collect" checked> 已完成（看過 / 讀過 / 聽過 / 玩過）</label>
 </div>
 <div class="row">
   <label><input type="checkbox" id="includeRating" checked> 同步評分</label>
@@ -71,6 +76,7 @@
 <div id="log"></div>
 <p class="hint">第一次建議先勾選“僅試掃描”，確認數量和匹配情況沒問題後，取消勾選再正式同步。同步中可以關閉這個窗口，後台會繼續跑。暫停後點“開始同步”會從頭重新跑，已寫入的條目重複寫入是安全的（按豆瓣數據覆蓋），只是會多花一點時間。</p>
 <p class="hint">之前用別的工具同步過、日期寫錯的條目，這次會按豆瓣日期重新寫入修正——插件不會跳過已標記的條目，每一條都會按豆瓣數據重寫一遍（包括日期）。</p>
+<p class="hint">三種狀態分別寫入 NeoDB 的願望單 / 進行中 / 已完成。想看的條目在豆瓣上一般沒有標記日期，同步後 NeoDB 會記為同步當天；看過 / 在看的條目按豆瓣日期寫入。</p>
 
 <script src="popup.js"></script>
 </body>

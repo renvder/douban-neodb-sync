@@ -2,7 +2,7 @@
 // does not stop it. All progress lives in chrome.storage.local, so the popup
 // can reopen at any time and pick up where it left off.
 
-import { DOUBAN_CATEGORIES, fetchDoubanCategory } from "./douban.js";
+import { DOUBAN_CATEGORIES, DOUBAN_SHELVES, fetchDoubanCategory } from "./douban.js";
 import {
   VISIBILITY,
   fetchItem,
@@ -116,9 +116,23 @@ async function doubanFetch(url) {
     await log(
       `豆瓣返回 404：最後地址 ${finalUrl}，標題「${title}」，內容：${text.replace(/\s+/g, " ").slice(0, 200)}`
     );
-    return { ok: false, status: 404, url: finalUrl, text: async () => html };
+    return {
+      ok: false,
+      status: 404,
+      url: finalUrl,
+      title,
+      pageText: text,
+      text: async () => html,
+    };
   }
-  return { ok: true, status: 200, url: finalUrl, text: async () => html };
+  return {
+    ok: true,
+    status: 200,
+    url: finalUrl,
+    title,
+    pageText: text,
+    text: async () => html,
+  };
 }
 
 const defaultState = () => ({
@@ -194,21 +208,36 @@ async function runJob(config) {
 
   try {
     // ---- Phase 1: fetch all Douban items ----
+    // One pass per (category, shelf): wish/do/collect map 1:1 onto NeoDB
+    // wishlist/progress/complete. Old saved configs have no `shelves`,
+    // so they default to collect-only (the previous behaviour).
     const allItems = [];
+    const shelves =
+      config.shelves && config.shelves.length ? config.shelves : ["collect"];
     for (const cat of config.categories) {
-      if (await isPausedOrStopped()) return;
-      const label = DOUBAN_CATEGORIES[cat].label;
-      await setState({ current: `${label}：正在讀取第 1 頁…` });
-      await log(`讀取豆瓣${label}列表…`);
-      const items = await fetchDoubanCategory(
-        cat,
-        (page, pageCount, total) =>
-          setState({ current: `${label}：已讀 ${page} 頁，共 ${total} 條…` }),
-        doubanFetch
-      );
-      items.forEach((it) => (it.category = cat));
-      await log(`豆瓣${label}：共 ${items.length} 條`);
-      allItems.push(...items);
+      for (const shelf of shelves) {
+        if (await isPausedOrStopped()) return;
+        const label = DOUBAN_CATEGORIES[cat].label;
+        const shelfLabel = DOUBAN_SHELVES[shelf].label;
+        await setState({ current: `${label}${shelfLabel}：正在讀取第 1 頁…` });
+        await log(`讀取豆瓣${label}${shelfLabel}列表…`);
+        const items = await fetchDoubanCategory(
+          cat,
+          shelf,
+          (page, pageCount, total) =>
+            setState({
+              current: `${label}${shelfLabel}：已讀 ${page} 頁，共 ${total} 條…`,
+            }),
+          doubanFetch
+        );
+        items.forEach((it) => {
+          it.category = cat;
+          it.shelf = shelf;
+          it.shelfType = DOUBAN_SHELVES[shelf].shelfType;
+        });
+        await log(`豆瓣${label}${shelfLabel}：共 ${items.length} 條`);
+        allItems.push(...items);
+      }
     }
     await setState({ total: allItems.length });
     await log(`豆瓣共 ${allItems.length} 條，開始在 NeoDB 匹配…`);
@@ -224,7 +253,7 @@ async function runJob(config) {
       allItems.map((item) => async () => {
         const r = await fetchItem(config.instance, config.token, item.doubanUrl);
         if (r.status === "found") {
-          resolved.set(item.doubanId, r.uuid);
+          resolved.set(item.doubanUrl, r.uuid);
           matchedCount++;
         } else if (r.status === "pending") {
           pending.push(item);
@@ -253,7 +282,7 @@ async function runJob(config) {
         pending.map((item) => async () => {
           const r = await pollFetch(config.instance, config.token, item.doubanUrl);
           if (r.status === "found") {
-            resolved.set(item.doubanId, r.uuid);
+            resolved.set(item.doubanUrl, r.uuid);
             matchedCount++;
           } else {
             matchFailed.push({ item, reason: r.code || "新建超時" });
@@ -271,7 +300,7 @@ async function runJob(config) {
       if (await isPausedOrStopped()) return;
     }
 
-    const toMark = allItems.filter((it) => resolved.has(it.doubanId));
+    const toMark = allItems.filter((it) => resolved.has(it.doubanUrl));
     await log(`匹配完成：${toMark.length} 條可同步，${matchFailed.length} 條失敗`);
     await setState({ matched: toMark.length, failed: matchFailed.length });
 
@@ -286,6 +315,8 @@ async function runJob(config) {
           date: it.date,
           stars: it.stars,
           comment: it.comment,
+          categoryLabel: DOUBAN_CATEGORIES[it.category].label,
+          shelfLabel: DOUBAN_SHELVES[it.shelf].label,
         })),
       };
       await setState({
@@ -306,11 +337,12 @@ async function runJob(config) {
         const r = await markItem(
           config.instance,
           config.token,
-          resolved.get(item.doubanId),
+          resolved.get(item.doubanUrl),
           {
             visibility: VISIBILITY[config.visibility] ?? VISIBILITY.public,
             ratingGrade: config.includeRating ? starsToGrade(item.stars) : 0,
             commentText: config.includeComments ? item.comment : "",
+            shelfType: item.shelfType,
             createdTime: doubanDateToCreatedTime(item.date),
           }
         );
@@ -351,6 +383,15 @@ async function runJob(config) {
     }[code] || `出錯了：${code}`;
     await setState({ status: "error", phase: "出錯", error: friendly });
     await log(friendly);
+    // Diagnostics: what did the background tab actually see? The title
+    // tells a login/verification page ("登录豆瓣") apart from a real list
+    // page (e.g. "…想读的书") or an empty list.
+    if (err && err.pageTitle) {
+      await log(`豆瓣頁面標題：「${err.pageTitle}」`);
+    }
+    if (err && err.pageText) {
+      await log(`頁面內容開頭：${err.pageText.replace(/\s+/g, " ").slice(0, 200)}`);
+    }
   }
 }
 
