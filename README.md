@@ -3,6 +3,8 @@
   <a href="./README_tw.md"><b>漢</b></a>
 </p>
 
+![Douban to NeoDB Sync](images/douban-neodb.webp)
+
 # Douban to NeoDB Sync
 
 Batch-sync your Douban watched / read / listened / played marks to NeoDB, keeping the original mark dates (the date you marked something on Douban is the date it shows on NeoDB).

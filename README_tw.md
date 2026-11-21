@@ -3,6 +3,8 @@
   <b>漢</b>
 </p>
 
+![豆瓣同步到 NeoDB](images/douban-neodb.webp)
+
 # 豆瓣同步到 NeoDB
 
 批量把豆瓣看過 / 讀過 / 聽過 / 玩過的條目同步到 NeoDB，標記日期沿用豆瓣上的標記日期（哪天在豆瓣點的看過，同步到 NeoDB 上就顯示哪天）。
