@@ -1,9 +1,9 @@
+![Douban to NeoDB Sync](images/douban-neodb.webp)
+
 <p align="right">
   🌐 <b>EN</b> |
   <a href="./README_tw.md"><b>漢</b></a>
 </p>
-
-![Douban to NeoDB Sync](images/douban-neodb.webp)
 
 # Douban to NeoDB Sync
 

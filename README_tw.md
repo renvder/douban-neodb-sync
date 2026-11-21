@@ -1,9 +1,9 @@
+![豆瓣同步到 NeoDB](images/douban-neodb.webp)
+
 <p align="right">
   🌐 <a href="./README.md"><b>EN</b></a> |
   <b>漢</b>
 </p>
-
-![豆瓣同步到 NeoDB](images/douban-neodb.webp)
 
 # 豆瓣同步到 NeoDB
 
